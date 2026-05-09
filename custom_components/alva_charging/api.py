@@ -107,7 +107,14 @@ class AlvaApiClient:
             "Authorization": f"Bearer {self._access_token}",
             "x-api-key": API_KEY,
             "Content-Type": "application/json",
-            "Accept-Language": "nl",
+            "Accept-Language": "nl-nl",
+            "Origin": "https://slimladen.alva-charging.nl",
+            "Referer": "https://slimladen.alva-charging.nl/",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
         }
 
     async def _request(
@@ -132,8 +139,16 @@ class AlvaApiClient:
                     return await self._request(method, endpoint, json_body, retry=False)
                 if resp.status >= 400:
                     text = await resp.text()
+                    _LOGGER.warning(
+                        "Alva %s %s -> %s headers=%s body=%s",
+                        method,
+                        endpoint,
+                        resp.status,
+                        dict(resp.headers),
+                        text[:500],
+                    )
                     raise AlvaApiError(
-                        f"{method} {endpoint} -> {resp.status}: {text[:200]}"
+                        f"{method} {endpoint} -> {resp.status}: {text[:300]}"
                     )
                 return await resp.json()
         except asyncio.TimeoutError as err:
