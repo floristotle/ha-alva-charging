@@ -17,7 +17,11 @@ API_KEY = "UNOhCoqbpC4Qucp8Ey2jX8QxuY9W7znh3QAvr6rX"
 SCAN_INTERVAL_SECONDS = 30
 
 # Charge mode mapping (observed values from powerconnect_control endpoint)
+# 0 observed when charging is scheduled/paused, 2 when actively in solar mode.
+# Values 1 (autopilot) and 3 (boost) inferred from portal UI labels — TBD
+# whether the numeric mapping for those is correct.
 CHARGE_MODES = {
+    0: "off",
     1: "autopilot",
     2: "solar",
     3: "boost",

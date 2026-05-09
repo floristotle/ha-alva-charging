@@ -72,14 +72,14 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise UpdateFailed(f"Login failed: {err}") from err
 
         try:
-            realtime, control = await asyncio.gather(
-                self.api.async_get_realtime_data(),
+            charger, control = await asyncio.gather(
+                self.api.async_get_charger_state(),
                 self.api.async_get_powerconnect_control(),
             )
         except AlvaApiError as err:
             raise UpdateFailed(str(err)) from err
 
-        state = _parse(realtime, control)
+        state = _parse(charger, control)
 
         # Refresh the cumulative kWh on a slower cadence (~every 2 minutes)
         # to avoid hammering the historical_data endpoint.
@@ -127,8 +127,19 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for item in items or []:
             if item.get("no_data"):
                 continue
-            data = item.get("data") or {}
-            for entry in data.values():
+            data = item.get("data")
+            # data may be either a dict {"0": [ts, delta], ...} (older API)
+            # or a flat list [ts, delta, ts, delta, ...] / list-of-lists (newer).
+            entries: list[Any] = []
+            if isinstance(data, dict):
+                entries = list(data.values())
+            elif isinstance(data, list):
+                # Could be a single [ts, delta] pair OR a list of [ts, delta] pairs
+                if len(data) == 2 and not isinstance(data[0], list):
+                    entries = [data]
+                else:
+                    entries = data
+            for entry in entries:
                 if isinstance(entry, list) and len(entry) >= 2:
                     delta = entry[1]
                     if isinstance(delta, (int, float)) and delta > 0:
@@ -137,35 +148,31 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 
 def _parse(
-    realtime: list[dict[str, Any]] | None,
+    charger: list[dict[str, Any]] | None,
     control: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Flatten the three responses into a single dict the entities consume."""
+    """Flatten the responses into a single dict the entities consume.
+
+    Realtime POST returns: [{"measurement":..., "field":..., "data":[ts, value], "no_data": bool}]
+    where `data` is a 2-element list: [ISO timestamp, value-or-object].
+    """
     out: dict[str, Any] = {}
 
-    if realtime:
-        for item in realtime:
-            measurement = item.get("measurement")
-            field = item.get("field")
-            data = item.get("data") or {}
-            if item.get("no_data"):
-                continue
-            if measurement == "evChargerMetrics" and field == "state":
-                state_obj = data.get("1") if isinstance(data, dict) else None
+    for item in charger or []:
+        if item.get("no_data"):
+            continue
+        if item.get("measurement") == "evChargerMetrics" and item.get("field") == "state":
+            data = item.get("data")
+            if isinstance(data, list) and len(data) >= 2:
+                ts, state_obj = data[0], data[1]
                 if isinstance(state_obj, dict):
                     out["charger_power_w"] = _to_float(state_obj.get("power"))
                     out["car_plugged"] = bool(state_obj.get("car_plugged"))
                     out["charger_online"] = bool(state_obj.get("online"))
                     out["charger_status"] = state_obj.get("status")
                     out["car_setting"] = state_obj.get("car_setting")
-                ts = data.get("0") if isinstance(data, dict) else None
                 if isinstance(ts, str):
                     out["charger_last_update"] = ts
-            elif measurement == "gridMetrics" and field == "actualPowerTot_W":
-                point = data.get("0") if isinstance(data, dict) else None
-                if isinstance(point, list) and len(point) >= 2:
-                    out["grid_power_w"] = _to_float(point[1])
-                    out["grid_last_update"] = point[0]
 
     if control:
         out["mode"] = control.get("mode")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as json_lib
 import logging
 from typing import Any
 
@@ -126,12 +127,16 @@ class AlvaApiClient:
         retry: bool = True,
     ) -> Any:
         url = f"{API_BASE_URL}/{endpoint.strip('/')}/"
+        # Serialize manually so the Content-Type header stays exactly
+        # "application/json" (without charset=utf-8 that aiohttp's json= adds);
+        # the AWS Lambda rejects with 400 "Wrong body format" otherwise.
+        data = json_lib.dumps(json_body) if json_body is not None else None
         try:
             async with self._session.request(
                 method,
                 url,
                 headers=self._headers(),
-                json=json_body,
+                data=data,
                 timeout=aiohttp.ClientTimeout(total=20),
             ) as resp:
                 if resp.status == 401 and retry:
@@ -155,18 +160,27 @@ class AlvaApiClient:
         except asyncio.TimeoutError as err:
             raise AlvaApiError(f"Timeout on {method} {endpoint}") from err
 
-    async def async_get_realtime_data(self) -> list[dict[str, Any]]:
-        """Return the realtime_data array (evChargerMetrics + gridMetrics).
+    async def async_get_charger_state(
+        self, connector_id: int = 1
+    ) -> list[dict[str, Any]]:
+        """POST realtime_data for evChargerMetrics.state — returns charger live state.
 
-        Despite returning data, the AWS API Gateway is configured to accept
-        only POST on this path (CORS Allow-Methods: OPTIONS,POST). GET produces
-        a 502 InternalServerErrorException from the Lambda.
+        Note: gridMetrics through realtime_data returns 400 Wrong body format
+        for every body shape we tried. The Flutter app does fetch gridMetrics
+        but likely via a different endpoint (TBD) — left out of MVP.
         """
-        return await self._request("POST", "realtime_data", json_body={})
+        body = [
+            {
+                "measurement": "evChargerMetrics",
+                "field": "state",
+                "tags": {"connector_id": connector_id},
+            }
+        ]
+        return await self._request("POST", "realtime_data", json_body=body)
 
     async def async_get_powerconnect_control(self) -> dict[str, Any]:
         """Return the powerconnect_control object (mode, online, session info)."""
-        return await self._request("POST", "powerconnect_control", json_body={})
+        return await self._request("GET", "powerconnect_control")
 
     # NOTE: /savings/ lives on slimladen.alva-charging.nl (cookie auth),
     # not on the AWS API Gateway — intentionally not implemented in MVP.

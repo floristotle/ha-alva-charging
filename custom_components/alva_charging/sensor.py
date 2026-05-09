@@ -46,16 +46,7 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         value_fn=lambda d: d.get("energy_total_kwh"),
     ),
-    AlvaSensorDescription(
-        key="grid_power",
-        translation_key="grid_power",
-        name="Netvermogen",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
-        value_fn=lambda d: d.get("grid_power_w"),
-    ),
-    AlvaSensorDescription(
+AlvaSensorDescription(
         key="charger_status",
         translation_key="charger_status",
         name="Laadstatus",
