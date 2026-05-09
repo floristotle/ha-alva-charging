@@ -72,15 +72,14 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise UpdateFailed(f"Login failed: {err}") from err
 
         try:
-            realtime, control, savings = await asyncio.gather(
+            realtime, control = await asyncio.gather(
                 self.api.async_get_realtime_data(),
                 self.api.async_get_powerconnect_control(),
-                self.api.async_get_savings(),
             )
         except AlvaApiError as err:
             raise UpdateFailed(str(err)) from err
 
-        state = _parse(realtime, control, savings)
+        state = _parse(realtime, control)
 
         # Refresh the cumulative kWh on a slower cadence (~every 2 minutes)
         # to avoid hammering the historical_data endpoint.
@@ -140,7 +139,6 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 def _parse(
     realtime: list[dict[str, Any]] | None,
     control: dict[str, Any] | None,
-    savings: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Flatten the three responses into a single dict the entities consume."""
     out: dict[str, Any] = {}
@@ -179,9 +177,6 @@ def _parse(
         out["charge_end_date"] = control.get("charge_end_date")
         out["session_start"] = control.get("start_session_timestamp")
         out["km_per_hour_charge"] = _to_float(control.get("km_hour_charge"))
-
-    if savings:
-        out["solar_savings_eur"] = _to_float(savings.get("solar"))
 
     return out
 

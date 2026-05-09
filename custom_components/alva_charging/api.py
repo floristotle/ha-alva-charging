@@ -65,9 +65,10 @@ class AlvaApiClient:
             _LOGGER.debug("Cognito login failed: %s", err)
             raise AlvaAuthError(str(err)) from err
 
-        # The API expects the ID token (which contains user claims), not the
-        # access token. The Flutter app uses idToken in its Authorization header.
-        self._access_token = tokens["id_token"]
+        # The Flutter app uses the access_token (not id_token) in its
+        # Authorization header — verified by comparing JWT kid prefixes
+        # against what the browser sends.
+        self._access_token = tokens["access_token"]
         self._refresh_token = tokens["refresh_token"]
 
     async def async_refresh(self) -> None:
@@ -88,13 +89,13 @@ class AlvaApiClient:
             )
             user.check_token(renew=True)
             return {
-                "id_token": user.id_token,
+                "access_token": user.access_token,
                 "refresh_token": user.refresh_token or self._refresh_token,
             }
 
         try:
             tokens = await self._hass.async_add_executor_job(_refresh)
-            self._access_token = tokens["id_token"]
+            self._access_token = tokens["access_token"]
             self._refresh_token = tokens["refresh_token"]
         except Exception as err:
             _LOGGER.debug("Cognito refresh failed, falling back to full login: %s", err)
@@ -167,9 +168,8 @@ class AlvaApiClient:
         """Return the powerconnect_control object (mode, online, session info)."""
         return await self._request("POST", "powerconnect_control", json_body={})
 
-    async def async_get_savings(self) -> dict[str, Any]:
-        """Return the savings object (solar savings amount in EUR)."""
-        return await self._request("POST", "savings", json_body={})
+    # NOTE: /savings/ lives on slimladen.alva-charging.nl (cookie auth),
+    # not on the AWS API Gateway — intentionally not implemented in MVP.
 
     async def async_get_charged_energy_deltas(
         self, time1: str, time2: str, connector_id: int = 1

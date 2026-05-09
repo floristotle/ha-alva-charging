@@ -90,14 +90,6 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda d: d.get("session_start"),
     ),
-    AlvaSensorDescription(
-        key="solar_savings",
-        translation_key="solar_savings",
-        name="Zon-besparing",
-        native_unit_of_measurement="EUR",
-        state_class=SensorStateClass.TOTAL,
-        value_fn=lambda d: d.get("solar_savings_eur"),
-    ),
 )
 
 
