@@ -155,16 +155,21 @@ class AlvaApiClient:
             raise AlvaApiError(f"Timeout on {method} {endpoint}") from err
 
     async def async_get_realtime_data(self) -> list[dict[str, Any]]:
-        """Return the realtime_data array (evChargerMetrics + gridMetrics)."""
-        return await self._request("GET", "realtime_data")
+        """Return the realtime_data array (evChargerMetrics + gridMetrics).
+
+        Despite returning data, the AWS API Gateway is configured to accept
+        only POST on this path (CORS Allow-Methods: OPTIONS,POST). GET produces
+        a 502 InternalServerErrorException from the Lambda.
+        """
+        return await self._request("POST", "realtime_data", json_body={})
 
     async def async_get_powerconnect_control(self) -> dict[str, Any]:
         """Return the powerconnect_control object (mode, online, session info)."""
-        return await self._request("GET", "powerconnect_control")
+        return await self._request("POST", "powerconnect_control", json_body={})
 
     async def async_get_savings(self) -> dict[str, Any]:
         """Return the savings object (solar savings amount in EUR)."""
-        return await self._request("GET", "savings")
+        return await self._request("POST", "savings", json_body={})
 
     async def async_get_charged_energy_deltas(
         self, time1: str, time2: str, connector_id: int = 1
