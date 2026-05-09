@@ -1,0 +1,12 @@
+{
+  "domain": "alva_charging",
+  "name": "Alva Charging",
+  "version": "0.1.0",
+  "documentation": "https://github.com/floristotle/ha-alva-charging",
+  "issue_tracker": "https://github.com/floristotle/ha-alva-charging/issues",
+  "codeowners": ["@floristotle"],
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "integration_type": "service",
+  "requirements": ["pycognito==2024.5.1"]
+}

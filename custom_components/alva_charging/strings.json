@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Alva Charging",
+        "description": "Log in met je Alva-account (slimladen.alva-charging.nl)",
+        "data": {
+          "email": "E-mailadres",
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Ongeldige inloggegevens",
+      "cannot_connect": "Kan geen verbinding maken met de Alva-cloud",
+      "unknown": "Onverwachte fout"
+    },
+    "abort": {
+      "already_configured": "Dit account is al geconfigureerd"
+    }
+  }
+}
