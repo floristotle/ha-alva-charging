@@ -1,11 +1,20 @@
 # Alva Charging — Home Assistant integration
 
-Een Home Assistant custom integration voor de Alva Charging cloud
-(Scoptvision API). Leest de status van een Alva-laadpaal (Alfen Eve Single
-NG910) uit en stelt de data beschikbaar als sensors.
+> ⚠️ **Persoonlijk project — niet aanbevolen voor anderen om te installeren**
+>
+> Deze integratie is gebouwd voor mijn eigen gebruik (de laadpaal van mijn
+> schoonouders) in samenwerking met [Claude Code](https://claude.com/code).
+> Het is een reverse-engineering van een private, ongedocumenteerde API
+> (Scoptvision) waarvoor geen publieke specificatie bestaat. Ik onderhoud dit
+> niet actief en geef geen support. De code kan op elk moment breken wanneer
+> Alva of Scoptvision hun API aanpassen.
+>
+> Als je toch interesse hebt: gebruik op eigen risico, fork hem, en verwacht
+> dat je 'm zelf moet onderhouden.
 
-> **Status:** experimenteel, reverse-engineered. De Alva/Scoptvision API is
-> niet publiek; wijzigingen aan hun kant kunnen de integratie breken.
+Een Home Assistant custom integration die de Alva Charging cloud
+(Scoptvision API) uitleest. Stelt de status van een Alva-laadpaal
+(Alfen Eve Single NG910) beschikbaar als sensors.
 
 ## Wat krijg je?
 
