@@ -43,7 +43,14 @@ BINARY_SENSORS: tuple[AlvaBinarySensorDescription, ...] = (
         translation_key="charging",
         name="Aan het laden",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda d: d.get("charger_status") == "charging",
+        # Treat as charging when actual power is flowing OR the API status
+        # explicitly says charging. The "paused" status can briefly coexist
+        # with non-zero power (e.g. between boost-cycles), which previously
+        # made this sensor read "off" while the car was clearly drawing kW.
+        value_fn=lambda d: (
+            (d.get("charger_power_w") or 0) > 100
+            or d.get("charger_status") == "charging"
+        ),
     ),
 )
 
