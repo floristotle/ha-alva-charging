@@ -185,13 +185,13 @@ class AlvaApiClient:
     # NOTE: /savings/ lives on slimladen.alva-charging.nl (cookie auth),
     # not on the AWS API Gateway — intentionally not implemented in MVP.
 
-    async def async_get_charged_energy_deltas(
+    async def async_get_total_charged_wh(
         self, time1: str, time2: str, connector_id: int = 1
-    ) -> list[dict[str, Any]]:
-        """Return hourly charged-energy deltas (Wh) between two ISO timestamps.
+    ) -> float | None:
+        """Return total Wh charged between time1 and time2 (single delta).
 
-        Each item in `data` is keyed by index ("0", "1", ...) with value
-        ["timestamp", delta_wh]. Sum the deltas to get cumulative Wh charged.
+        deltaMeter returns ONE [timestamp, delta_wh] pair across the window
+        (verified via probe). Same value the portal shows as 'Totaal verbruik'.
         """
         body = [
             {
@@ -204,4 +204,56 @@ class AlvaApiClient:
                 "tags": {"connector_id": connector_id},
             }
         ]
-        return await self._request("POST", "historical_data", json_body=body)
+        result = await self._request("POST", "historical_data", json_body=body)
+        if not isinstance(result, list) or not result:
+            return None
+        item = result[0]
+        if item.get("no_data"):
+            return None
+        data = item.get("data")
+        if isinstance(data, list) and len(data) >= 2:
+            value = data[1]
+            if isinstance(value, (int, float)) and value >= 0:
+                return float(value)
+        return None
+
+    async def async_get_solar_charge_kwh(
+        self, time1: str, time2: str, connector_id: int = 1
+    ) -> float | None:
+        """Return total kWh charged from solar between time1 and time2."""
+        body = [
+            {
+                "time1": time1,
+                "time2": time2,
+                "retention_policy": None,
+                "field": "solar_charge",
+                "measurement": None,
+                "frequency": "total",
+                "tags": {"connector_id": connector_id},
+            }
+        ]
+        result = await self._request("POST", "calculated_data", json_body=body)
+        if not isinstance(result, list) or not result:
+            return None
+        item = result[0]
+        if item.get("no_data"):
+            return None
+        data = item.get("data")
+        if isinstance(data, list) and len(data) >= 2:
+            value = data[1]
+            if isinstance(value, (int, float)) and value >= 0:
+                return float(value)
+        return None
+
+    async def async_set_mode(self, mode: int) -> bool:
+        """Set the charge mode. Returns True on success.
+
+        Verified via probe: POST powerconnect_control with body {"mode": <int>}
+        returns {"message": true}. Known mappings: 1=autopilot (likely),
+        2=solar, 3=boost. Mode 0 observed when no schedule is active and
+        cannot be set explicitly via the portal.
+        """
+        result = await self._request(
+            "POST", "powerconnect_control", json_body={"mode": int(mode)}
+        )
+        return isinstance(result, dict) and result.get("message") is True

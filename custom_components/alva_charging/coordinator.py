@@ -8,19 +8,16 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.helpers.storage import Store
 
 from .api import AlvaApiClient, AlvaApiError, AlvaAuthError
 from .const import DOMAIN, SCAN_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
-# How often to refresh the cumulative kWh (more expensive, less time-critical
-# than the realtime endpoints).
-ENERGY_UPDATE_INTERVAL = timedelta(minutes=2)
-
-# Storage version for the persisted baseline + last cumulative value.
-STORAGE_VERSION = 1
+# How often to refresh the slower aggregates (totals per day/month/year + solar
+# breakdown). These rarely change minute-to-minute and each refresh costs 6
+# API calls.
+AGGREGATE_REFRESH_INTERVAL = timedelta(minutes=5)
 
 
 class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -35,32 +32,12 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.api = AlvaApiClient(hass, email, password)
         self._authenticated = False
-        self._store: Store = Store(hass, STORAGE_VERSION, f"{DOMAIN}_state")
-        self._baseline_iso: str | None = None
-        self._last_energy_wh: float | None = None
-        self._last_energy_fetch: datetime | None = None
+        self._last_aggregates: dict[str, Any] = {}
+        self._last_aggregate_fetch: datetime | None = None
 
     async def async_initialize(self) -> None:
-        """Restore persistent state (baseline + last cumulative kWh)."""
-        stored = await self._store.async_load()
-        if isinstance(stored, dict):
-            self._baseline_iso = stored.get("baseline_iso")
-            self._last_energy_wh = stored.get("last_energy_wh")
-        if not self._baseline_iso:
-            # First-time setup: start the cumulative counter from now (UTC).
-            self._baseline_iso = (
-                datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-                .replace("+00:00", "Z")
-            )
-            await self._save_state()
-
-    async def _save_state(self) -> None:
-        await self._store.async_save(
-            {
-                "baseline_iso": self._baseline_iso,
-                "last_energy_wh": self._last_energy_wh,
-            }
-        )
+        """Optional one-time async setup hook."""
+        return None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all relevant endpoints and return a flattened state dict."""
@@ -81,81 +58,80 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         state = _parse(charger, control)
 
-        # Refresh the cumulative kWh on a slower cadence (~every 2 minutes)
-        # to avoid hammering the historical_data endpoint.
         now = datetime.now(timezone.utc)
         if (
-            self._last_energy_fetch is None
-            or now - self._last_energy_fetch >= ENERGY_UPDATE_INTERVAL
+            self._last_aggregate_fetch is None
+            or now - self._last_aggregate_fetch >= AGGREGATE_REFRESH_INTERVAL
         ):
             try:
-                energy_wh = await self._fetch_cumulative_energy(now)
+                aggs = await self._fetch_aggregates(now)
             except AlvaApiError as err:
-                _LOGGER.debug("Cumulative energy fetch failed: %s", err)
-                energy_wh = self._last_energy_wh
+                _LOGGER.debug("Aggregate fetch failed: %s", err)
             else:
-                self._last_energy_fetch = now
-                # Guard against transient API blips returning lower totals.
-                if (
-                    energy_wh is not None
-                    and self._last_energy_wh is not None
-                    and energy_wh < self._last_energy_wh
-                ):
-                    _LOGGER.debug(
-                        "Ignoring lower cumulative reading %.1f < %.1f",
-                        energy_wh,
-                        self._last_energy_wh,
-                    )
-                    energy_wh = self._last_energy_wh
-                self._last_energy_wh = energy_wh
-                await self._save_state()
+                self._last_aggregates = aggs
+                self._last_aggregate_fetch = now
 
-        if self._last_energy_wh is not None:
-            state["energy_total_kwh"] = round(self._last_energy_wh / 1000.0, 3)
-
+        state.update(self._last_aggregates)
         return state
 
-    async def _fetch_cumulative_energy(self, now: datetime) -> float | None:
-        """Sum hourly charged-energy deltas since the persistent baseline."""
-        if not self._baseline_iso:
-            return None
-        time2 = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        items = await self.api.async_get_charged_energy_deltas(
-            time1=self._baseline_iso, time2=time2
-        )
-        total = 0.0
-        for item in items or []:
-            if item.get("no_data"):
-                continue
-            data = item.get("data")
-            # data may be either a dict {"0": [ts, delta], ...} (older API)
-            # or a flat list [ts, delta, ts, delta, ...] / list-of-lists (newer).
-            entries: list[Any] = []
-            if isinstance(data, dict):
-                entries = list(data.values())
-            elif isinstance(data, list):
-                # Could be a single [ts, delta] pair OR a list of [ts, delta] pairs
-                if len(data) == 2 and not isinstance(data[0], list):
-                    entries = [data]
-                else:
-                    entries = data
-            for entry in entries:
-                if isinstance(entry, list) and len(entry) >= 2:
-                    delta = entry[1]
-                    if isinstance(delta, (int, float)) and delta > 0:
-                        total += float(delta)
-        return total
+    async def _fetch_aggregates(self, now: datetime) -> dict[str, Any]:
+        """Fetch total + solar charged kWh for day, month, and year windows."""
+        windows = _period_windows(now)
+        # Issue all 6 calls in parallel (3 windows × 2 fields).
+        tasks: list[asyncio.Task] = []
+        for label, (t1, t2) in windows.items():
+            tasks.append(asyncio.create_task(self.api.async_get_total_charged_wh(t1, t2)))
+            tasks.append(asyncio.create_task(self.api.async_get_solar_charge_kwh(t1, t2)))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        out: dict[str, Any] = {}
+        for i, label in enumerate(windows):
+            total_wh = results[i * 2]
+            solar_kwh = results[i * 2 + 1]
+            total_kwh = (
+                round(total_wh / 1000.0, 2)
+                if isinstance(total_wh, (int, float))
+                else None
+            )
+            solar_kwh_val = (
+                round(float(solar_kwh), 2)
+                if isinstance(solar_kwh, (int, float))
+                else None
+            )
+            grid_kwh = None
+            solar_pct = None
+            if total_kwh is not None and solar_kwh_val is not None:
+                grid_kwh = round(max(total_kwh - solar_kwh_val, 0.0), 2)
+                if total_kwh > 0:
+                    solar_pct = round((solar_kwh_val / total_kwh) * 100, 1)
+                    # Clamp in case of rounding noise
+                    solar_pct = max(0.0, min(100.0, solar_pct))
+            out[f"{label}_total_kwh"] = total_kwh
+            out[f"{label}_solar_kwh"] = solar_kwh_val
+            out[f"{label}_grid_kwh"] = grid_kwh
+            out[f"{label}_solar_pct"] = solar_pct
+        return out
+
+
+def _period_windows(now: datetime) -> dict[str, tuple[str, str]]:
+    """Return UTC ISO windows for today, this month, this year, ending at `now`."""
+    fmt = lambda dt: dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    end = now
+    day_start = end.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = day_start.replace(day=1)
+    year_start = month_start.replace(month=1)
+    return {
+        "day": (fmt(day_start), fmt(end)),
+        "month": (fmt(month_start), fmt(end)),
+        "year": (fmt(year_start), fmt(end)),
+    }
 
 
 def _parse(
     charger: list[dict[str, Any]] | None,
     control: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Flatten the responses into a single dict the entities consume.
-
-    Realtime POST returns: [{"measurement":..., "field":..., "data":[ts, value], "no_data": bool}]
-    where `data` is a 2-element list: [ISO timestamp, value-or-object].
-    """
+    """Flatten the realtime + control responses into a single dict."""
     out: dict[str, Any] = {}
 
     for item in charger or []:

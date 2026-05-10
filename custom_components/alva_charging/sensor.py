@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfPower
+from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -27,6 +27,35 @@ class AlvaSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
 
 
+def _period_kwh(period: str, kind: str) -> AlvaSensorDescription:
+    """Build a kWh sensor description for total/solar/grid × day/month/year."""
+    nl_kind = {"total": "totaal", "solar": "zon", "grid": "net"}[kind]
+    nl_period = {"day": "vandaag", "month": "deze maand", "year": "dit jaar"}[period]
+    return AlvaSensorDescription(
+        key=f"{period}_{kind}_kwh",
+        translation_key=f"{period}_{kind}_kwh",
+        name=f"Geladen {nl_kind} {nl_period}",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+        value_fn=lambda d, p=period, k=kind: d.get(f"{p}_{k}_kwh"),
+    )
+
+
+def _solar_pct(period: str) -> AlvaSensorDescription:
+    nl_period = {"day": "vandaag", "month": "deze maand", "year": "dit jaar"}[period]
+    return AlvaSensorDescription(
+        key=f"{period}_solar_pct",
+        translation_key=f"{period}_solar_pct",
+        name=f"Zonpercentage {nl_period}",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda d, p=period: d.get(f"{p}_solar_pct"),
+    )
+
+
 SENSORS: tuple[AlvaSensorDescription, ...] = (
     AlvaSensorDescription(
         key="charger_power",
@@ -37,6 +66,9 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         value_fn=lambda d: d.get("charger_power_w"),
     ),
+    # Year total used as the Energy Dashboard input. State class
+    # `total_increasing` makes HA treat the January-1 rollover (year resets to
+    # 0) as a meter reset rather than a negative anomaly.
     AlvaSensorDescription(
         key="energy_total",
         translation_key="energy_total",
@@ -44,9 +76,10 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        value_fn=lambda d: d.get("energy_total_kwh"),
+        suggested_display_precision=2,
+        value_fn=lambda d: d.get("year_total_kwh"),
     ),
-AlvaSensorDescription(
+    AlvaSensorDescription(
         key="charger_status",
         translation_key="charger_status",
         name="Laadstatus",
@@ -81,6 +114,9 @@ AlvaSensorDescription(
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda d: d.get("session_start"),
     ),
+    # Aggregates per period: total / solar / grid kWh + solar%
+    *(_period_kwh(p, k) for p in ("day", "month", "year") for k in ("total", "solar", "grid")),
+    *(_solar_pct(p) for p in ("day", "month", "year")),
 )
 
 
