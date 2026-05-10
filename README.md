@@ -1,16 +1,22 @@
 # Alva Charging — Home Assistant integration
 
-> ⚠️ **Persoonlijk project — niet aanbevolen voor anderen om te installeren**
+> # 🛑 STOP — niet voor jou bedoeld
 >
-> Deze integratie is gebouwd voor mijn eigen gebruik (de laadpaal van mijn
-> schoonouders) in samenwerking met [Claude Code](https://claude.com/code).
-> Het is een reverse-engineering van een private, ongedocumenteerde API
-> (Scoptvision) waarvoor geen publieke specificatie bestaat. Ik onderhoud dit
-> niet actief en geef geen support. De code kan op elk moment breken wanneer
-> Alva of Scoptvision hun API aanpassen.
+> Deze repo bestaat alleen omdat het de simpelste manier is om de integratie
+> via HACS aan één specifieke Home Assistant te leveren (die van mijn
+> schoonouders). Hij is **niet** bedoeld als breed publiek project.
 >
-> Als je toch interesse hebt: gebruik op eigen risico, fork hem, en verwacht
-> dat je 'm zelf moet onderhouden.
+> - Geen support, geen issues, geen PRs.
+> - Reverse-engineered tegen een ongedocumenteerde Scoptvision-API; kan op
+>   elk moment kapot gaan.
+> - Geen test-coverage. Bouw mee gemaakt met [Claude Code](https://claude.com/code).
+> - Account-specifieke aannames (single-connector Alfen Eve, Nederlandse
+>   tijdzone, één gebruiker per HA).
+>
+> **Als je hier per ongeluk bent**: scroll terug en kijk eens naar
+> [`alfen_wallbox`](https://github.com/leeyuentuen/alfen_wallbox) of
+> [`evcc`](https://github.com/evcc-io/evcc) — dat zijn echte projecten met
+> een gemeenschap.
 
 Een Home Assistant custom integration die de Alva Charging cloud
 (Scoptvision API) uitleest. Stelt de status van een Alva-laadpaal
