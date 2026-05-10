@@ -75,19 +75,25 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return state
 
     async def _fetch_aggregates(self, now: datetime) -> dict[str, Any]:
-        """Fetch total + solar charged kWh for day, month, and year windows."""
+        """Fetch totals, solar share, and EUR costs for day/month/year windows."""
         windows = _period_windows(now)
-        # Issue all 6 calls in parallel (3 windows × 2 fields).
+        # 4 calls per window: total kWh, solar kWh, costs (import/export EUR),
+        # solar savings EUR. All issued in parallel.
         tasks: list[asyncio.Task] = []
-        for label, (t1, t2) in windows.items():
+        for _label, (t1, t2) in windows.items():
             tasks.append(asyncio.create_task(self.api.async_get_total_charged_wh(t1, t2)))
             tasks.append(asyncio.create_task(self.api.async_get_solar_charge_kwh(t1, t2)))
+            tasks.append(asyncio.create_task(self.api.async_get_costs(t1, t2)))
+            tasks.append(asyncio.create_task(self.api.async_get_solar_savings_eur(t1, t2)))
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         out: dict[str, Any] = {}
         for i, label in enumerate(windows):
-            total_wh = results[i * 2]
-            solar_kwh = results[i * 2 + 1]
+            total_wh = results[i * 4]
+            solar_kwh = results[i * 4 + 1]
+            costs = results[i * 4 + 2]
+            savings = results[i * 4 + 3]
+
             total_kwh = (
                 round(total_wh / 1000.0, 2)
                 if isinstance(total_wh, (int, float))
@@ -104,12 +110,24 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 grid_kwh = round(max(total_kwh - solar_kwh_val, 0.0), 2)
                 if total_kwh > 0:
                     solar_pct = round((solar_kwh_val / total_kwh) * 100, 1)
-                    # Clamp in case of rounding noise
                     solar_pct = max(0.0, min(100.0, solar_pct))
             out[f"{label}_total_kwh"] = total_kwh
             out[f"{label}_solar_kwh"] = solar_kwh_val
             out[f"{label}_grid_kwh"] = grid_kwh
             out[f"{label}_solar_pct"] = solar_pct
+
+            if isinstance(costs, dict):
+                imp = costs.get("import")
+                exp = costs.get("export")
+                out[f"{label}_grid_import_eur"] = (
+                    round(float(imp), 2) if isinstance(imp, (int, float)) else None
+                )
+                out[f"{label}_grid_export_eur"] = (
+                    round(float(exp), 2) if isinstance(exp, (int, float)) else None
+                )
+            if isinstance(savings, (int, float)):
+                out[f"{label}_solar_savings_eur"] = round(float(savings), 2)
+
         return out
 
 

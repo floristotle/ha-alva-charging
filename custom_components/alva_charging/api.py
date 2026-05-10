@@ -16,6 +16,7 @@ from .const import (
     COGNITO_CLIENT_ID,
     COGNITO_REGION,
     COGNITO_USER_POOL_ID,
+    SLIMLADEN_BASE_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class AlvaApiClient:
         self._password = password
         self._session: aiohttp.ClientSession = async_get_clientsession(hass)
         self._access_token: str | None = None
+        self._id_token: str | None = None
         self._refresh_token: str | None = None
 
     async def async_login(self) -> None:
@@ -66,10 +68,10 @@ class AlvaApiClient:
             _LOGGER.debug("Cognito login failed: %s", err)
             raise AlvaAuthError(str(err)) from err
 
-        # The Flutter app uses the access_token (not id_token) in its
-        # Authorization header — verified by comparing JWT kid prefixes
-        # against what the browser sends.
+        # AWS API Gateway (execute-api.eu-central-1) requires access_token.
+        # slimladen.alva-charging.nl/api requires id_token. Keep both.
         self._access_token = tokens["access_token"]
+        self._id_token = tokens["id_token"]
         self._refresh_token = tokens["refresh_token"]
 
     async def async_refresh(self) -> None:
@@ -91,12 +93,14 @@ class AlvaApiClient:
             user.check_token(renew=True)
             return {
                 "access_token": user.access_token,
+                "id_token": user.id_token,
                 "refresh_token": user.refresh_token or self._refresh_token,
             }
 
         try:
             tokens = await self._hass.async_add_executor_job(_refresh)
             self._access_token = tokens["access_token"]
+            self._id_token = tokens["id_token"]
             self._refresh_token = tokens["refresh_token"]
         except Exception as err:
             _LOGGER.debug("Cognito refresh failed, falling back to full login: %s", err)
@@ -242,6 +246,70 @@ class AlvaApiClient:
         if isinstance(data, list) and len(data) >= 2:
             value = data[1]
             if isinstance(value, (int, float)) and value >= 0:
+                return float(value)
+        return None
+
+    async def _slimladen_get(self, endpoint: str, params: dict[str, str]) -> Any:
+        """GET https://slimladen.alva-charging.nl/api/<endpoint>/ with id_token."""
+        if not self._id_token:
+            raise AlvaAuthError("Not authenticated (no id_token)")
+        # Build query string manually to match the format the portal uses.
+        from urllib.parse import urlencode  # local import keeps top of file clean
+        url = f"{SLIMLADEN_BASE_URL}/{endpoint.strip('/')}/"
+        if params:
+            url = f"{url}?{urlencode(params)}"
+        headers = {
+            "Authorization": f"Bearer {self._id_token}",
+            "Content-Type": "application/json",
+            "Accept-Language": "nl-nl",
+            "Origin": "https://slimladen.alva-charging.nl",
+            "Referer": "https://slimladen.alva-charging.nl/",
+        }
+        try:
+            async with self._session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)
+            ) as resp:
+                if resp.status == 401:
+                    # id_token might have expired — refresh and retry once.
+                    await self.async_refresh()
+                    headers["Authorization"] = f"Bearer {self._id_token}"
+                    async with self._session.get(
+                        url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)
+                    ) as r2:
+                        if r2.status >= 400:
+                            text = await r2.text()
+                            raise AlvaApiError(
+                                f"slimladen GET {endpoint} -> {r2.status}: {text[:200]}"
+                            )
+                        return await r2.json()
+                if resp.status >= 400:
+                    text = await resp.text()
+                    raise AlvaApiError(
+                        f"slimladen GET {endpoint} -> {resp.status}: {text[:200]}"
+                    )
+                return await resp.json()
+        except asyncio.TimeoutError as err:
+            raise AlvaApiError(f"Timeout on slimladen GET {endpoint}") from err
+
+    async def async_get_costs(self, time1: str, time2: str) -> dict[str, float] | None:
+        """Return {'import': eur_cost, 'export': eur_revenue} for the home over the period."""
+        result = await self._slimladen_get(
+            "costs", {"start_time": time1, "end_time": time2}
+        )
+        if isinstance(result, dict):
+            return result
+        return None
+
+    async def async_get_solar_savings_eur(
+        self, time1: str, time2: str
+    ) -> float | None:
+        """Return EUR savings from solar charging over the period."""
+        result = await self._slimladen_get(
+            "savings", {"start_time": time1, "end_time": time2}
+        )
+        if isinstance(result, dict):
+            value = result.get("solar")
+            if isinstance(value, (int, float)):
                 return float(value)
         return None
 

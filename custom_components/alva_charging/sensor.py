@@ -56,6 +56,26 @@ def _solar_pct(period: str) -> AlvaSensorDescription:
     )
 
 
+def _eur_sensor(period: str, kind: str) -> AlvaSensorDescription:
+    """EUR sensors from /api/costs (home grid import/export) and /api/savings."""
+    nl_kind = {
+        "grid_import": "Netimport kosten",
+        "grid_export": "Netexport opbrengst",
+        "solar_savings": "Zon besparing",
+    }[kind]
+    nl_period = {"day": "vandaag", "month": "deze maand", "year": "dit jaar"}[period]
+    return AlvaSensorDescription(
+        key=f"{period}_{kind}_eur",
+        translation_key=f"{period}_{kind}_eur",
+        name=f"{nl_kind} {nl_period}",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d, p=period, k=kind: d.get(f"{p}_{k}_eur"),
+    )
+
+
 SENSORS: tuple[AlvaSensorDescription, ...] = (
     AlvaSensorDescription(
         key="charger_power",
@@ -117,6 +137,12 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
     # Aggregates per period: total / solar / grid kWh + solar%
     *(_period_kwh(p, k) for p in ("day", "month", "year") for k in ("total", "solar", "grid")),
     *(_solar_pct(p) for p in ("day", "month", "year")),
+    # EUR cost sensors per period (home-level grid import/export, solar savings)
+    *(
+        _eur_sensor(p, k)
+        for p in ("day", "month", "year")
+        for k in ("grid_import", "grid_export", "solar_savings")
+    ),
 )
 
 
