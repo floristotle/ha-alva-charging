@@ -222,39 +222,37 @@ class AlvaApiClient:
         return None
 
     async def async_get_grid_power_w(self) -> float | None:
-        """Return the most recent hourly grid power reading (W).
+        """Return the most recent ~minute-level grid power reading (W).
 
-        gridMetrics is not available on /realtime_data/ (returns 400) but
-        /historical_data/ accepts it and returns hourly averages. We take the
-        last entry as the closest-to-now value. Resolution is 1 hour, so this
-        lags up to an hour behind reality.
+        Uses the site's alt body shape on /realtime_data/ with a single
+        `time` parameter and `rp_one_m` retention. Negative values = exporting
+        to the grid; positive = importing. Resolution ~minute (much better
+        than the hourly historical_data fallback we used in 0.4.x).
         """
-        from datetime import datetime, timezone, timedelta
-        now = datetime.now(timezone.utc)
-        time1 = (now - timedelta(hours=3)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        time2 = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        from datetime import datetime, timezone
+        now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         body = [
             {
-                "time1": time1,
-                "time2": time2,
-                "retention_policy": "rp_one_h",
-                "field": "mean_actualPowerTot_W",
+                "time": now_iso,
+                "retention_policy": "rp_one_m",
+                "field": "actualPowerTot_W",
                 "measurement": "gridMetrics",
-                "tags": {},
             }
         ]
-        result = await self._request("POST", "historical_data", json_body=body)
+        result = await self._request("POST", "realtime_data", json_body=body)
         if not isinstance(result, list) or not result:
             return None
         item = result[0]
         if item.get("no_data"):
             return None
         data = item.get("data")
+        # Response shape: data is either [[ts, val]] or [ts, val] depending on call.
         if isinstance(data, list) and data:
-            # Either flat [ts, val] or list-of-pairs. Take the last pair's value.
-            last = data[-1]
-            if isinstance(last, list) and len(last) >= 2 and isinstance(last[1], (int, float)):
-                return float(last[1])
+            first = data[0]
+            if isinstance(first, list) and len(first) >= 2 and isinstance(first[1], (int, float)):
+                return float(first[1])
+            if isinstance(first, str) and len(data) >= 2 and isinstance(data[1], (int, float)):
+                return float(data[1])
         return None
 
     async def async_get_solar_charge_kwh(

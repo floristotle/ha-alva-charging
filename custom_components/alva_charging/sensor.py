@@ -142,6 +142,17 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         suggested_display_precision=1,
         value_fn=lambda d: d.get("peak_charge_kw"),
     ),
+    # Currently-scheduled target watts from the autopilot schedule.
+    # Useful for automations: "if next 30 min target > 3 kW, do X".
+    AlvaSensorDescription(
+        key="current_target",
+        translation_key="current_target",
+        name="Huidig laad-doel",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda d: d.get("current_target_w"),
+    ),
     AlvaSensorDescription(
         key="session_start",
         translation_key="session_start",

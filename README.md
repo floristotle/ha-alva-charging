@@ -73,6 +73,59 @@ kWh-sensor.
 - **Cloud-polling**: data is ~30s vertraagd; korte events worden gemist.
 - **Single account**: één instance per Alva-account.
 
+## Voorbeeld-Lovelace
+
+Plak dit als een `vertical-stack` (of stuk daarvan) in je dashboard:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: glance
+    title: Alva laadpaal
+    columns: 4
+    entities:
+      - entity: select.alva_charging_laadmodus_instellen
+        name: Modus
+      - entity: sensor.alva_charging_laadstatus
+        name: Status
+      - entity: binary_sensor.alva_charging_aan_het_laden
+        name: Laadt
+      - entity: binary_sensor.alva_charging_auto_verbonden
+        name: Auto
+
+  - type: entities
+    title: Live
+    entities:
+      - sensor.alva_charging_laadvermogen
+      - sensor.alva_charging_netvermogen
+      - sensor.alva_charging_huidig_laad_doel
+      - sensor.alva_charging_laadbehoefte
+      - sensor.alva_charging_laden_klaar_voor
+
+  - type: statistic
+    title: Geladen vandaag
+    entity: sensor.alva_charging_geladen_totaal_vandaag
+    stat_type: change
+    period:
+      calendar:
+        period: day
+
+  - type: gauge
+    name: Zonpercentage deze maand
+    entity: sensor.alva_charging_zonpercentage_deze_maand
+    min: 0
+    max: 100
+    severity:
+      green: 80
+      yellow: 50
+      red: 0
+
+  - type: calendar
+    entities:
+      - calendar.alva_charging_laadschema
+    initial_view: listWeek
+```
+
 ## Licentie
 
 MIT — zie [LICENSE](LICENSE).

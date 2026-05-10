@@ -175,8 +175,39 @@ def _parse(
         out["session_start"] = control.get("start_session_timestamp")
         out["km_per_hour_charge"] = _to_float(control.get("km_hour_charge"))
         out["peak_charge_kw"] = _to_float(control.get("peak_charge"))
+        # autopilot_setpoints: {"<iso ts>": <watts>} dict, 48 quarter-hour
+        # slots ahead. Pass through verbatim for the calendar entity to
+        # build events from. Also derive a single 'current target' value
+        # for an automation-friendly sensor.
+        sp = control.get("autopilot_setpoints")
+        if isinstance(sp, dict):
+            out["autopilot_setpoints"] = sp
+            out["current_target_w"] = _current_setpoint_w(sp)
 
     return out
+
+
+def _current_setpoint_w(setpoints: dict[str, Any]) -> float | None:
+    """Return the wattage of the setpoint window covering 'now' (UTC)."""
+    if not setpoints:
+        return None
+    now = datetime.now(timezone.utc)
+    # Setpoint keys are ISO-8601 with 'Z'; each slot lasts 15 min.
+    best_key = None
+    best_dt = None
+    for k in setpoints:
+        try:
+            dt = datetime.fromisoformat(k.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if dt <= now and (best_dt is None or dt > best_dt):
+            best_dt = dt
+            best_key = k
+    if best_key is not None:
+        v = setpoints[best_key]
+        if isinstance(v, (int, float)):
+            return float(v)
+    return None
 
 
 def _to_float(value: Any) -> float | None:

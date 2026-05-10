@@ -1,0 +1,40 @@
+{
+  "entity": {
+    "sensor": {
+      "charger_power": { "default": "mdi:flash" },
+      "energy_total": { "default": "mdi:counter" },
+      "grid_power": { "default": "mdi:transmission-tower" },
+      "charger_status": { "default": "mdi:ev-station" },
+      "charge_mode": { "default": "mdi:tune" },
+      "charge_need_km": { "default": "mdi:map-marker-distance" },
+      "month_peak": { "default": "mdi:chart-bell-curve" },
+      "session_start": { "default": "mdi:clock-start" },
+      "charge_end_date": { "default": "mdi:clock-end" },
+      "peak_charge": { "default": "mdi:speedometer" },
+      "current_target": { "default": "mdi:bullseye-arrow" },
+      "day_total_kwh": { "default": "mdi:car-electric" },
+      "month_total_kwh": { "default": "mdi:car-electric" },
+      "year_total_kwh": { "default": "mdi:car-electric" },
+      "day_solar_kwh": { "default": "mdi:solar-power" },
+      "month_solar_kwh": { "default": "mdi:solar-power" },
+      "year_solar_kwh": { "default": "mdi:solar-power" },
+      "day_grid_kwh": { "default": "mdi:transmission-tower-import" },
+      "month_grid_kwh": { "default": "mdi:transmission-tower-import" },
+      "year_grid_kwh": { "default": "mdi:transmission-tower-import" },
+      "day_solar_pct": { "default": "mdi:white-balance-sunny" },
+      "month_solar_pct": { "default": "mdi:white-balance-sunny" },
+      "year_solar_pct": { "default": "mdi:white-balance-sunny" }
+    },
+    "binary_sensor": {
+      "car_plugged": { "default": "mdi:ev-plug-type2" },
+      "charger_online": { "default": "mdi:cloud-check" },
+      "charging": { "default": "mdi:battery-charging" }
+    },
+    "select": {
+      "mode": { "default": "mdi:tune-vertical-variant" }
+    },
+    "calendar": {
+      "schedule_calendar": { "default": "mdi:calendar-clock" }
+    }
+  }
+}
