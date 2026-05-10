@@ -221,6 +221,42 @@ class AlvaApiClient:
                 return float(value)
         return None
 
+    async def async_get_grid_power_w(self) -> float | None:
+        """Return the most recent hourly grid power reading (W).
+
+        gridMetrics is not available on /realtime_data/ (returns 400) but
+        /historical_data/ accepts it and returns hourly averages. We take the
+        last entry as the closest-to-now value. Resolution is 1 hour, so this
+        lags up to an hour behind reality.
+        """
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
+        time1 = (now - timedelta(hours=3)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        time2 = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        body = [
+            {
+                "time1": time1,
+                "time2": time2,
+                "retention_policy": "rp_one_h",
+                "field": "mean_actualPowerTot_W",
+                "measurement": "gridMetrics",
+                "tags": {},
+            }
+        ]
+        result = await self._request("POST", "historical_data", json_body=body)
+        if not isinstance(result, list) or not result:
+            return None
+        item = result[0]
+        if item.get("no_data"):
+            return None
+        data = item.get("data")
+        if isinstance(data, list) and data:
+            # Either flat [ts, val] or list-of-pairs. Take the last pair's value.
+            last = data[-1]
+            if isinstance(last, list) and len(last) >= 2 and isinstance(last[1], (int, float)):
+                return float(last[1])
+        return None
+
     async def async_get_solar_charge_kwh(
         self, time1: str, time2: str, connector_id: int = 1
     ) -> float | None:
@@ -249,6 +285,11 @@ class AlvaApiClient:
                 return float(value)
         return None
 
+    # NOTE: slimladen.alva-charging.nl/api/{costs,savings} endpoints removed
+    # in v0.4.0. Their EUR data is whole-house (not EV-only), bloats HA's
+    # recorder DB without much benefit, and the savings/ endpoint ignores
+    # its time params (always returns the same value). Code retained below
+    # but no longer wired into the coordinator.
     async def _slimladen_get(self, endpoint: str, params: dict[str, str]) -> Any:
         """GET https://slimladen.alva-charging.nl/api/<endpoint>/ with id_token."""
         if not self._id_token:

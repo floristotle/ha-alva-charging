@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync manifest version with tag
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          jq --arg v "$tag" '.version = $v' \
+            custom_components/alva_charging/manifest.json > manifest.tmp.json
+          mv manifest.tmp.json custom_components/alva_charging/manifest.json
+          cat custom_components/alva_charging/manifest.json
+
+      - name: Bundle integration zip
+        run: |
+          cd custom_components/alva_charging
+          zip -r ../../alva_charging.zip .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: alva_charging.zip
+          generate_release_notes: true
