@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import AlvaApiClient, AlvaApiError, AlvaAuthError
@@ -37,16 +38,14 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_aggregates: dict[str, Any] = {}
         self._last_aggregate_fetch: datetime | None = None
 
-    async def async_initialize(self) -> None:
-        return None
-
     async def _async_update_data(self) -> dict[str, Any]:
         if not self._authenticated:
             try:
                 await self.api.async_login()
                 self._authenticated = True
             except AlvaAuthError as err:
-                raise UpdateFailed(f"Login failed: {err}") from err
+                # Wrong credentials → trigger HA's reauth flow.
+                raise ConfigEntryAuthFailed(f"Login failed: {err}") from err
 
         try:
             charger, control, meter_wh = await asyncio.gather(
@@ -54,6 +53,10 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.api.async_get_powerconnect_control(),
                 self.api.async_get_meter_reading_wh(),
             )
+        except AlvaAuthError as err:
+            # Refresh failed and re-login was rejected — credentials likely changed.
+            self._authenticated = False
+            raise ConfigEntryAuthFailed(f"Re-auth required: {err}") from err
         except AlvaApiError as err:
             raise UpdateFailed(str(err)) from err
 

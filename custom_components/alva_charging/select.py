@@ -16,10 +16,10 @@ from .entity import AlvaEntity
 _LOGGER = logging.getLogger(__name__)
 
 # Mapping option label -> mode integer to send to the API.
-# Mode 0 ("off"/no active schedule) is read-only — not user-settable.
-# Mode 1 ("Piek") was discovered during testing but is intentionally NOT
-# exposed here: it's a feature the user's account is not entitled to and
-# was only reachable by directly POSTing to the API.
+# Verified by toggling each option in the slimladen portal (commit 6b6e71f):
+#   0 = Boost, 2 = Zon, 3 = Autopilot.
+# Mode 1 ("Piek") is intentionally NOT exposed — this account is not entitled
+# to that feature and it was only reachable by direct POST during probing.
 MODE_OPTIONS: dict[str, int] = {
     "Zon": 2,
     "Autopilot": 3,
@@ -49,9 +49,12 @@ class AlvaModeSelect(AlvaEntity, SelectEntity):
 
     def __init__(self, coordinator: AlvaCoordinator) -> None:
         super().__init__(coordinator, self.entity_description.key)
+        self._optimistic_option: str | None = None
 
     @property
     def current_option(self) -> str | None:
+        if self._optimistic_option is not None:
+            return self._optimistic_option
         mode = (self.coordinator.data or {}).get("mode")
         if mode is None:
             return None
@@ -62,8 +65,15 @@ class AlvaModeSelect(AlvaEntity, SelectEntity):
         if mode_int is None:
             _LOGGER.warning("Unknown mode option: %s", option)
             return
+        # Show the new option immediately; the next coordinator refresh confirms.
+        self._optimistic_option = option
+        self.async_write_ha_state()
         ok = await self.coordinator.api.async_set_mode(mode_int)
         if not ok:
             _LOGGER.warning("API did not confirm mode change to %s", option)
-        # Refresh state so the new mode shows up promptly.
         await self.coordinator.async_request_refresh()
+
+    def _handle_coordinator_update(self) -> None:
+        # Drop the optimistic value once the coordinator catches up.
+        self._optimistic_option = None
+        super()._handle_coordinator_update()
