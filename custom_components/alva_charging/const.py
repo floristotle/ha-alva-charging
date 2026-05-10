@@ -31,11 +31,11 @@ SCAN_INTERVAL_SECONDS = 30
 # "Autopilot" button which appears to be a higher-tier feature unrelated to
 # any of these numeric values.
 CHARGE_MODES = {
-    0: "off",
+    # Final mapping verified by toggling each option in the slimladen portal:
+    0: "boost",
     1: "peak",
     2: "solar",
     3: "autopilot",
-    # Boost mode number TBD — yesterday we mistook autopilot for boost.
 }
 
 # Charger status values seen in realtime_data evChargerMetrics.state
