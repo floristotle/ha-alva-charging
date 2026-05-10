@@ -34,7 +34,8 @@ CHARGE_MODES = {
     0: "off",
     1: "peak",
     2: "solar",
-    3: "boost",
+    3: "autopilot",
+    # Boost mode number TBD — yesterday we mistook autopilot for boost.
 }
 
 # Charger status values seen in realtime_data evChargerMetrics.state

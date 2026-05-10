@@ -22,7 +22,9 @@ _LOGGER = logging.getLogger(__name__)
 # was only reachable by directly POSTing to the API.
 MODE_OPTIONS: dict[str, int] = {
     "Zon": 2,
-    "Boost": 3,
+    "Autopilot": 3,
+    # Boost mode number is not yet identified — leaving out of options
+    # until we probe a real Boost click.
 }
 INT_TO_OPTION: dict[int, str] = {v: k for k, v in MODE_OPTIONS.items()}
 
