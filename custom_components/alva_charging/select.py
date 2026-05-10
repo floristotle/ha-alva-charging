@@ -17,8 +17,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Mapping option label -> mode integer to send to the API.
 # Mode 0 ("off"/no active schedule) is read-only — not user-settable.
+# Verified via live mode-cycle test: 1=Piek (peak limit, shows max-piek
+# field in the portal), 2=Zon, 3=Boost.
 MODE_OPTIONS: dict[str, int] = {
-    "Autopilot": 1,
+    "Piek": 1,
     "Zon": 2,
     "Boost": 3,
 }

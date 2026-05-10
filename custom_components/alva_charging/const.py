@@ -23,13 +23,16 @@ SLIMLADEN_BASE_URL = "https://slimladen.alva-charging.nl/api"
 # we refresh as needed inside the coordinator.
 SCAN_INTERVAL_SECONDS = 30
 
-# Charge mode mapping (observed values from powerconnect_control endpoint)
-# 0 observed when charging is scheduled/paused, 2 when actively in solar mode.
-# Values 1 (autopilot) and 3 (boost) inferred from portal UI labels — TBD
-# whether the numeric mapping for those is correct.
+# Charge mode mapping (observed values from powerconnect_control endpoint).
+# Confirmed by toggling each mode and observing what the slimladen portal
+# shows: 1 → "Piek" (peak-limited), 2 → "Zon" (solar), 3 → "Boost".
+# Mode 0 is what the API returns when no active schedule applies (cannot be
+# set explicitly via the user-facing UI). The portal also shows an inactive
+# "Autopilot" button which appears to be a higher-tier feature unrelated to
+# any of these numeric values.
 CHARGE_MODES = {
     0: "off",
-    1: "autopilot",
+    1: "peak",
     2: "solar",
     3: "boost",
 }
