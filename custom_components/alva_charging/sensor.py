@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable
 
 from homeassistant.components.sensor import (
@@ -18,6 +19,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import CHARGE_MODES, DOMAIN
 from .coordinator import AlvaCoordinator
 from .entity import AlvaEntity
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    """Tolerant ISO-8601 parser. Handles trailing 'Z' and millisecond suffix."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        # datetime.fromisoformat in Py 3.11+ handles 'Z'; pre-3.11 doesn't.
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -135,7 +147,14 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         translation_key="session_start",
         name="Sessie gestart",
         device_class=SensorDeviceClass.TIMESTAMP,
-        value_fn=lambda d: d.get("session_start"),
+        value_fn=lambda d: _parse_iso(d.get("session_start")),
+    ),
+    AlvaSensorDescription(
+        key="charge_end_date",
+        translation_key="charge_end_date",
+        name="Laden klaar voor",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda d: _parse_iso(d.get("charge_end_date")),
     ),
     # Aggregates per period: total / solar / grid kWh + solar%
     *(_period_kwh(p, k) for p in ("day", "month", "year") for k in ("total", "solar", "grid")),
