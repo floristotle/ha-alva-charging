@@ -80,9 +80,10 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         value_fn=lambda d: d.get("charger_power_w"),
     ),
-    # Year total used as the Energy Dashboard input. State class
-    # `total_increasing` makes HA treat the January-1 rollover (year resets to
-    # 0) as a meter reset rather than a negative anomaly.
+    # Energy Dashboard input. Uses the Alfen's lifetime cumulative meter
+    # reading (chargedAbsEnergyTot_Wh) — only resets on hardware/firmware
+    # swaps, which HA's `total_increasing` handles correctly. More stable
+    # than year-to-date because it never crosses a calendar boundary.
     AlvaSensorDescription(
         key="energy_total",
         translation_key="energy_total",
@@ -91,7 +92,7 @@ SENSORS: tuple[AlvaSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         suggested_display_precision=2,
-        value_fn=lambda d: d.get("year_total_kwh"),
+        value_fn=lambda d: d.get("meter_reading_kwh"),
     ),
     AlvaSensorDescription(
         key="charger_status",

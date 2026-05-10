@@ -221,6 +221,42 @@ class AlvaApiClient:
                 return float(value)
         return None
 
+    async def async_get_meter_reading_wh(self, connector_id: int = 1) -> float | None:
+        """Return the Alfen's lifetime energy meter reading (Wh).
+
+        This is the absolute meter value (`chargedAbsEnergyTot_Wh`) that the
+        charger itself maintains. Monotonically increasing across the
+        charger's lifetime — resets only on hardware swap or firmware reset.
+        Ideal source for HA's Energy Dashboard with `total_increasing` state
+        class because it never resets on calendar boundaries.
+
+        Note: requires both retention_policy='rp_one_m' AND tags.connector_id;
+        without the connector_id tag the API returns no_data=true.
+        """
+        from datetime import datetime, timezone
+        now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        body = [
+            {
+                "time": now_iso,
+                "retention_policy": "rp_one_m",
+                "field": "chargedAbsEnergyTot_Wh",
+                "measurement": "evChargerMetrics",
+                "tags": {"connector_id": connector_id},
+            }
+        ]
+        result = await self._request("POST", "realtime_data", json_body=body)
+        if not isinstance(result, list) or not result:
+            return None
+        item = result[0]
+        if item.get("no_data"):
+            return None
+        data = item.get("data")
+        if isinstance(data, list) and data:
+            first = data[0]
+            if isinstance(first, list) and len(first) >= 2 and isinstance(first[1], (int, float)):
+                return float(first[1])
+        return None
+
     async def async_get_grid_power_w(self) -> float | None:
         """Return the most recent ~minute-level grid power reading (W).
 

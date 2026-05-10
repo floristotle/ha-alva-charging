@@ -49,14 +49,17 @@ class AlvaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise UpdateFailed(f"Login failed: {err}") from err
 
         try:
-            charger, control = await asyncio.gather(
+            charger, control, meter_wh = await asyncio.gather(
                 self.api.async_get_charger_state(),
                 self.api.async_get_powerconnect_control(),
+                self.api.async_get_meter_reading_wh(),
             )
         except AlvaApiError as err:
             raise UpdateFailed(str(err)) from err
 
         state = _parse(charger, control)
+        if isinstance(meter_wh, (int, float)) and meter_wh > 0:
+            state["meter_reading_kwh"] = round(meter_wh / 1000.0, 3)
 
         now = datetime.now(timezone.utc)
         if (
