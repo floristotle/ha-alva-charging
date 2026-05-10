@@ -8,6 +8,13 @@
           "email": "E-mailadres",
           "password": "Wachtwoord"
         }
+      },
+      "reauth_confirm": {
+        "title": "Alva Charging opnieuw aanmelden",
+        "description": "Het wachtwoord voor {email} werkt niet meer. Vul het nieuwe wachtwoord in.",
+        "data": {
+          "password": "Wachtwoord"
+        }
       }
     },
     "error": {
@@ -16,7 +23,8 @@
       "unknown": "Onverwachte fout"
     },
     "abort": {
-      "already_configured": "Dit account is al geconfigureerd"
+      "already_configured": "Dit account is al geconfigureerd",
+      "reauth_successful": "Opnieuw ingelogd"
     }
   }
 }

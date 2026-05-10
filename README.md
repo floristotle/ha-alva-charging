@@ -29,11 +29,11 @@ Een Home Assistant custom integration die de Alva Charging cloud
 - **Actueel laadvermogen** (W)
 - **Actueel netvermogen** (W)
 - **Laadstatus** (charging / paused / idle)
-- **Laadmodus** (solar / autopilot / boost)
-- **Laadbehoefte** (km)
-- **Maandpiek** (W)
-- **Sessie-starttijd**
-- **Zon-besparing** (EUR)
+- **Laadmodus** (solar / autopilot / boost) — uitleesbaar én instelbaar via select
+- **Laadbehoefte** (km), **Maandpiek** (W), **Piek-limiet** (kW),
+  **Huidig laad-doel** (W), **Sessie gestart**, **Laden klaar voor**
+- **Aggregaten** per dag/maand/jaar: totaal/zon/net kWh + zonpercentage
+- **Calendar**: het autopilot-laadschema als read-only events
 - Binary sensors: `auto_verbonden`, `laadpaal_online`, `aan_het_laden`
 
 ## Installatie via HACS
@@ -55,16 +55,20 @@ kWh-sensor.
 1. **Instellingen → Dashboards → Energie → Individuele apparaten → Apparaat toevoegen**
 2. Selecteer `sensor.alva_charging_totaal_geladen`
 
-> De cumulatieve teller start op 0 kWh bij installatie. Eerder geladen energie
-> (van vóór installatie) wordt niet meegeteld.
+> De teller leest de lifetime kWh-waarde van de Alfen zelf — vanaf de eerste
+> meting zie je dus de totale historie van de laadpaal, niet alleen wat na
+> installatie geladen is.
 
 ## Hoe werkt het onder de motorkap?
 
 - Authenticatie via AWS Cognito (User Pool `eu-central-1_5xHk0jl2i`)
-- Polling van `realtime_data/`, `powerconnect_control/`, `savings/` elke 30s
-- Cumulatieve kWh via `historical_data/` met `deltaMeter` operator, optellen sinds
-  een baseline-datum die persistent in HA wordt opgeslagen
-- Tokens worden automatisch ververst bij 401-fouten
+- Live polling (`realtime_data/` + `powerconnect_control/`) elke 30s
+- Energy-Dashboard kWh = de lifetime meter van de Alfen zelf
+  (`chargedAbsEnergyTot_Wh`), die alleen reset bij firmware-reset of
+  hardware-swap — door HA via `total_increasing` afgehandeld
+- Aggregaten (`historical_data/` deltaMeter + `calculated_data/` solar_charge)
+  elke 5 min voor day/month/year, grenzen op Europe/Amsterdam-tijd
+- Tokens worden automatisch ververst bij 401; reauth-flow wanneer dat faalt
 
 ## Beperkingen
 
